@@ -2,8 +2,10 @@ import warnings
 import numpy as np
 import pandas as pd
 import yfinance as yf
+import multiprocessing as mp
 import matplotlib.pyplot as plt
 
+from functools import partial
 from scipy.optimize import minimize
 from hmmlearn.hmm import GaussianHMM
 from datetime import datetime, timedelta
@@ -431,6 +433,26 @@ class PortfolioAnalyzer:
             "Downside_Volatility": downside_std * 100
         }
         return metrics
+
+    def _simulate_path(self, args):
+        """
+        Single simulation path for multiprocessing
+        """
+        distribution_finders, cov_matrix, time_horizon = args
+        
+        # Generate uncorrelated returns for each stock
+        uncorrelated_returns = np.array([
+            distribution_finders[ticker].generate_samples(finder.best_method, time_horizon)
+            for ticker, finder in distribution_finders.items()
+        ]).T
+        
+        # Apply Cholesky decomposition for correlation
+        L = np.linalg.cholesky(cov_matrix)
+        daily_returns = np.dot(uncorrelated_returns, L.T)
+        
+        # Calculate portfolio returns and cumulative value
+        portfolio_returns = np.sum(daily_returns * self.weights, axis=1)
+        return np.cumprod(1 + portfolio_returns) * self.initial_investment
     
     def run_monte_carlo(self, num_simulations, time_horizon):
         """
@@ -447,18 +469,31 @@ class PortfolioAnalyzer:
             finder.find_best_distribution(returns[ticker])
             distribution_finders[ticker] = finder
         
-        # Run simulations
-        simulation_results = np.zeros((num_simulations, time_horizon))
-        for sim in range(num_simulations):
-            uncorrelated_returns = np.array([
-                distribution_finders[ticker].generate_samples(finder.best_method, time_horizon)
-                for ticker, finder in distribution_finders.items()
-            ]).T
+        # # Run simulations
+        # simulation_results = np.zeros((num_simulations, time_horizon))
+        # for sim in range(num_simulations):
+        #     uncorrelated_returns = np.array([
+        #         distribution_finders[ticker].generate_samples(finder.best_method, time_horizon)
+        #         for ticker, finder in distribution_finders.items()
+        #     ]).T
             
-            L = np.linalg.cholesky(cov_matrix)
-            daily_returns = np.dot(uncorrelated_returns, L.T)
-            portfolio_returns = np.sum(daily_returns * self.weights, axis = 1)
-            simulation_results[sim] = np.cumprod(1 + portfolio_returns) * self.initial_investment
+        #     L = np.linalg.cholesky(cov_matrix)
+        #     daily_returns = np.dot(uncorrelated_returns, L.T)
+        #     portfolio_returns = np.sum(daily_returns * self.weights, axis = 1)
+        #     simulation_results[sim] = np.cumprod(1 + portfolio_returns) * self.initial_investment
+        
+        # return simulation_results, returns, distribution_finders
+
+        # Prepare arguments for multiprocessing
+        args = [(distribution_finders, cov_matrix, time_horizon)] * num_simulations
+        
+        # Determine optimal number of processes
+        num_cores = mp.cpu_count()
+        num_processes = min(num_cores, num_simulations)
+        
+        # Run simulations in parallel
+        with mp.Pool(processes = num_processes) as pool:
+            simulation_results = np.array(pool.map(self._simulate_path, args))
         
         return simulation_results, returns, distribution_finders
     
