@@ -39,7 +39,7 @@ class OptimalDistributionFinder:
             'skewness': skew(returns)
         }
         
-        # Add Student's t-distribution
+        # Student's t-distribution
         df, loc, scale = student_t.fit(returns)
         self.fitted_models['student_t'] = {
             'df': df,
@@ -451,7 +451,7 @@ class PortfolioAnalyzer:
         daily_returns = np.dot(uncorrelated_returns, L.T)
         
         # Calculate portfolio returns and cumulative value
-        portfolio_returns = np.sum(daily_returns * self.weights, axis=1)
+        portfolio_returns = np.sum(daily_returns * self.weights, axis = 1)
         return np.cumprod(1 + portfolio_returns) * self.initial_investment
     
     def run_monte_carlo(self, num_simulations, time_horizon):
@@ -468,31 +468,13 @@ class PortfolioAnalyzer:
             finder = OptimalDistributionFinder()
             finder.find_best_distribution(returns[ticker])
             distribution_finders[ticker] = finder
-        
-        # # Run simulations
-        # simulation_results = np.zeros((num_simulations, time_horizon))
-        # for sim in range(num_simulations):
-        #     uncorrelated_returns = np.array([
-        #         distribution_finders[ticker].generate_samples(finder.best_method, time_horizon)
-        #         for ticker, finder in distribution_finders.items()
-        #     ]).T
-            
-        #     L = np.linalg.cholesky(cov_matrix)
-        #     daily_returns = np.dot(uncorrelated_returns, L.T)
-        #     portfolio_returns = np.sum(daily_returns * self.weights, axis = 1)
-        #     simulation_results[sim] = np.cumprod(1 + portfolio_returns) * self.initial_investment
-        
-        # return simulation_results, returns, distribution_finders
 
         # Prepare arguments for multiprocessing
         args = [(distribution_finders, cov_matrix, time_horizon)] * num_simulations
-        
-        # Determine optimal number of processes
         num_cores = mp.cpu_count()
-        num_processes = min(num_cores, num_simulations)
         
         # Run simulations in parallel
-        with mp.Pool(processes = num_processes) as pool:
+        with mp.Pool(processes = num_cores) as pool:
             simulation_results = np.array(pool.map(self._simulate_path, args))
         
         return simulation_results, returns, distribution_finders
@@ -504,27 +486,89 @@ class PortfolioAnalyzer:
         final_values = simulation_results[:, -1]
         confidence_levels = [0.9, 0.95, 0.99]
         
-        analysis = {
-            "Distribution_Info": {ticker: finder.best_method 
-                                for ticker, finder in distribution_finders.items()},
-            "Risk_Metrics": self.calculate_risk_metrics(returns),
-            "Simulation_Results": {
-                "Mean": np.mean(final_values),
-                "Median": np.median(final_values),
-                "Std": np.std(final_values),
-                "Confidence_Intervals": {
-                    f"{level:.0%}": (np.percentile(final_values, (1 - level) * 100),
-                                     np.percentile(final_values, level * 100))
-                    for level in confidence_levels
-                }
-            }
-        }
+        basic_stats = pd.DataFrame({
+            'Metric': [
+                'Initial Investment',
+                'Mean Final Value',
+                'Median Final Value',
+                'Standard Deviation',
+                'Coefficient of Variation'
+            ],
+            'Value': [
+                f"${self.initial_investment:,.2f}",
+                f"${np.mean(final_values):,.2f}",
+                f"${np.median(final_values):,.2f}",
+                f"${np.std(final_values):,.2f}",
+                f"{(np.std(final_values) / np.mean(final_values)):,.4f}"
+            ]
+        })
+        
+        portfolio_returns = np.sum(returns * self.weights, axis=1)
+        downside_returns = portfolio_returns[portfolio_returns < 0]
+        downside_std = np.std(downside_returns) * np.sqrt(252) if len(downside_returns) > 0 else 0
+        
+        cum_returns = (1 + portfolio_returns).cumprod()
+        rolling_max = cum_returns.expanding().max()
+        max_drawdown = float((cum_returns / rolling_max - 1).min())
+        
+        risk_metrics = pd.DataFrame({
+            'Metric': [
+                'VaR (95%)',
+                'CVaR (95%)',
+                'Sharpe Ratio',
+                'Sortino Ratio',
+                'Maximum Drawdown',
+                'Downside Volatility',
+                'Annual Return',
+                'Annual Volatility'
+            ],
+            'Value': [
+                f"{-np.percentile(portfolio_returns, 5) * 100:.2f}%",
+                f"{-portfolio_returns[portfolio_returns <= np.percentile(portfolio_returns, 5)].mean() * 100:.2f}%",
+                f"{(portfolio_returns.mean() * 252) / (portfolio_returns.std() * np.sqrt(252)):.4f}",
+                f"{(portfolio_returns.mean() * 252) / downside_std if downside_std > 0 else np.inf:.4f}",
+                f"{max_drawdown * 100:.2f}%",
+                f"{downside_std * 100:.2f}%",
+                f"{portfolio_returns.mean() * 252 * 100:.2f}%",
+                f"{portfolio_returns.std() * np.sqrt(252) * 100:.2f}%"
+            ]
+        })
+    
+        confidence_intervals = pd.DataFrame({
+            'Confidence Level': [f"{level:.0%}" for level in confidence_levels],
+            'Lower Bound': [f"${np.percentile(final_values, (1 - level) * 100):,.2f}" 
+                        for level in confidence_levels],
+            'Upper Bound': [f"${np.percentile(final_values, level * 100):,.2f}" 
+                        for level in confidence_levels]
+        })
+        
+        # Distribution information
+        distribution_info = pd.DataFrame({
+            'Stock': list(distribution_finders.keys()),
+            'Best Distribution': [finder.best_method for finder in distribution_finders.values()]
+        })
         
         if self.transaction_costs is not None:
             total_cost = np.sum(np.abs(self.weights) * self.transaction_costs) * self.initial_investment
-            analysis["Transaction_Costs"] = total_cost
+            transaction_df = pd.DataFrame({
+                'Metric': ['Total Transaction Cost', 'Cost as % of Investment'],
+                'Value': [
+                    f"${total_cost:,.2f}",
+                    f"{(total_cost / self.initial_investment) * 100:.2f}%"
+                ]
+            })
         
-        return analysis
+        analysis_results = {
+            'Basic Statistics': basic_stats,
+            'Risk Metrics': risk_metrics,
+            'Confidence Intervals': confidence_intervals,
+            'Distribution Information': distribution_info
+        }
+        
+        if self.transaction_costs is not None:
+            analysis_results['Transaction Costs'] = transaction_df
+        
+        return analysis_results
     
     def plot_results(self, simulation_results):
         """
@@ -581,8 +625,7 @@ def run_portfolio_analysis(tickers, weights = None, initial_investment = 100000,
     simulation_results, returns, distribution_finders = analyzer.run_monte_carlo(
         num_simulations, time_horizon
     )
-    
-    # Analyze results
+
     analysis = analyzer.analyze_results(simulation_results, returns, distribution_finders)
     
     # Generate efficient frontier

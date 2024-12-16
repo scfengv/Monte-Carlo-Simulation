@@ -13,22 +13,17 @@ def main():
         max_weight = 0.4   # Maximum 40% in each stock
     )
     
-    print("\n========== Portfolio Analysis Results ==========")
-    print("Risk Metrics:")
-    for metric, value in analysis["Risk_Metrics"].items():
-        if metric not in ["Sharpe_Ratio", "Sortino_Ratio"]:
-            print(f"{metric}: {value:.4f}%")
-        else:
-            print(f"{metric}: {value:.4f}")
-    
-    print("\nSimulation Results:")
-    print(f"Mean Final Value: ${analysis['Simulation_Results']['Mean']:,.2f}")
-    print(f"Median Final Value: ${analysis['Simulation_Results']['Median']:,.2f}")
-    print(f"Standard Deviation: {(analysis['Simulation_Results']['Std'] / analysis['Simulation_Results']['Mean']):,.4f}")
-    
+    print("\nBasic Statistics:")
+    print(analysis['Basic Statistics'])
+
+    print("\nRisk Metrics:")
+    print(analysis['Risk Metrics'])
+
     print("\nConfidence Intervals:")
-    for level, (lower, upper) in analysis["Simulation_Results"]["Confidence_Intervals"].items():
-        print(f"{level} Confidence Interval: ${lower:,.2f} to ${upper:,.2f}")
+    print(analysis['Confidence Intervals'])
+
+    print("\nDistribution Information:")
+    print(analysis['Distribution Information'])
 
 if __name__ == "__main__":
     main()
