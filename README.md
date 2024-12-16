@@ -9,7 +9,7 @@ This project implements an advanced portfolio analysis system with several key f
 
 - **Monte Carlo Simulation**: Generates thousands (adjustable) of possible future scenarios using historical data and optimal distribution fitting
 - **Portfolio Optimization**: Implements modern portfolio theory and SLSQP algorithm to optimize asset allocation based on various objectives (Sharpe ratio, minimum risk, maximum return)
-- **Distribution Analysis**: Automatically determines the best statistical distribution for each asset's returns (Normal distribution, GausianHMM, Gausian Mixture Model, Kernel Distribution Estimation, etc.)
+- **Distribution Analysis**: Automatically determines the best statistical distribution for each asset's returns (Normal, Hidden Markov Model, Gaussian Mixture Model, Kernel Density Estimation, etc.)
 - **Risk Metrics**: Calculates comprehensive risk metrics including VaR, CVaR, and maximum drawdown
 - **Dynamic Risk Assessment**: Uses EWMA for dynamic covariance estimation
 - **Transaction Costs**: Incorporates transaction costs into portfolio optimization
