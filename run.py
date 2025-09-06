@@ -1,7 +1,8 @@
 from mc import *
 
 def main():
-    tickers = ["TSLA", "AAPL", "AMD", "AMZN", "AVGO", "META", "PLTR", "NVDA", "SMR", "TSM", "ON", "JD", "BABA"]
+    # tickers = ["TSLA", "AAPL", "AMD", "AMZN", "AVGO", "META", "PLTR", "NVDA", "SMR", "TSM", "ON", "JD", "BABA"]
+    tickers = ["XLB", "XLV", "XLP", "XLY", "XLE", "XLF", "XLK", "XLI", "XLU"]
     
     analysis, stock_metrics, efficient_frontier = run_portfolio_analysis(
         tickers = tickers,
@@ -9,7 +10,7 @@ def main():
         num_simulations = 1000,
         time_horizon = 30,
         optimization_goal = "sharpe",
-        min_weight = 0,    # Minimum 0% in each stock
+        min_weight = -1,    # Minimum 0% in each stock
         max_weight = 0.4   # Maximum 40% in each stock
     )
     
